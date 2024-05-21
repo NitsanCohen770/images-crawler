@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import Bottleneck from 'bottleneck';
 import debug from 'debug';
+import crypto from 'crypto';
 
 const log = debug('crawler');
 
@@ -147,7 +148,9 @@ export async function downloadImage(
 }
 
 function getImageFilename(url: string): string {
-  return path.basename(new URL(url).pathname);
+  return (
+    crypto.createHash('sha256').update(url).digest('hex') + path.extname(url)
+  );
 }
 
 function shouldCrawlLink(link: string, baseUrl: string): boolean {
