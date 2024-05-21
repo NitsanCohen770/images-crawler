@@ -154,7 +154,7 @@ function shouldCrawlLink(link: string, baseUrl: string): boolean {
   }
 }
 
-async function crawl(
+export async function crawl(
   url: string,
   maxDepth: number,
   currentDepth = 1
@@ -207,5 +207,3 @@ process.on('SIGTERM', () => {
   console.log('Gracefully shutting down...');
   process.exit();
 });
-
-export { crawl };
