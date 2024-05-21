@@ -119,6 +119,37 @@ export async function saveImages(images: ImageInfo[]): Promise<void> {
   log('Saved images:', images);
 }
 
+export async function downloadImage(
+  url: string,
+  filepath: string
+): Promise<void> {
+  const response = await axios({
+    url,
+    method: 'GET',
+    responseType: 'stream',
+  });
+
+  return new Promise((resolve, reject) => {
+    const writer = fs.createWriteStream(filepath);
+    response.data.pipe(writer);
+    let error: Error | null = null;
+    writer.on('error', (err) => {
+      error = err;
+      writer.close();
+      reject(err);
+    });
+    writer.on('close', () => {
+      if (!error) {
+        resolve();
+      }
+    });
+  });
+}
+
+function getImageFilename(url: string): string {
+  return path.basename(new URL(url).pathname);
+}
+
 function shouldCrawlLink(link: string, baseUrl: string): boolean {
   const baseDomain = new URL(baseUrl).hostname;
   try {
@@ -142,6 +173,10 @@ export async function crawl(url: string, maxDepth: number): Promise<void> {
         const html = await fetchPage(currentUrl);
         const images = extractImages(html, currentUrl, currentDepth);
         await saveImages(images);
+        for (const image of images) {
+          const filepath = path.join(imagesDir, getImageFilename(image.url));
+          await downloadImage(image.url, filepath);
+        }
         if (currentDepth < maxDepth) {
           const $ = cheerio.load(html);
           const links = $('a[href]')
