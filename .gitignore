@@ -1,0 +1,33 @@
+# Node.js dependencies
+/node_modules
+
+# Build outputs
+/dist
+/build
+
+# TypeScript compiled files
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor directories and files
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# Ignore images folder
+/images
+
+# Ignore env files
+.env
