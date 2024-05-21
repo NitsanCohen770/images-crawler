@@ -1,16 +1,23 @@
-import { Command } from "commander";
-import { crawl } from "./crawler";
+import { crawl } from './crawler';
 
-const program = new Command();
+const [, , startUrl, maxDepthArg] = process.argv;
 
-program
-  .version("1.0.0")
-  .description("Simple web crawler")
-  .argument("<start_url>", "URL to start crawling from")
-  .option("-d, --depth <number>", "Depth of crawl", "1")
-  .action((start_url, options) => {
-    const depth = parseInt(options.depth, 10);
-    crawl(start_url, depth);
+if (!startUrl || !maxDepthArg) {
+  console.error('Usage: ts-node src/index.ts <start_url> <depth>');
+  process.exit(1);
+}
+
+const maxDepth = parseInt(maxDepthArg, 10);
+
+if (isNaN(maxDepth) || maxDepth < 1) {
+  console.error('Depth must be a positive integer.');
+  process.exit(1);
+}
+
+crawl(startUrl, maxDepth)
+  .then(() => {
+    console.log('Crawling complete.');
+  })
+  .catch((error) => {
+    console.error('Error during crawling:', error);
   });
-
-program.parse(process.argv);

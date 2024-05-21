@@ -33,11 +33,11 @@ interface ImageInfo {
   depth: number;
 }
 
-export function getRandomUserAgent(): string {
+function getRandomUserAgent(): string {
   return userAgentList[Math.floor(Math.random() * userAgentList.length)];
 }
 
-export function isValidUrl(url: string): boolean {
+function isValidUrl(url: string): boolean {
   try {
     new URL(url);
     return true;
@@ -46,7 +46,7 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
-export function resolveUrl(base: string, relative: string): string {
+function resolveUrl(base: string, relative: string): string {
   try {
     return new URL(relative, base).href;
   } catch {
@@ -54,7 +54,7 @@ export function resolveUrl(base: string, relative: string): string {
   }
 }
 
-export async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string): Promise<string> {
   const userAgent = getRandomUserAgent();
   const maxRetries = 3;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -90,11 +90,7 @@ export async function fetchPage(url: string): Promise<string> {
   throw new Error(`Failed to fetch page: ${url}`);
 }
 
-export function extractImages(
-  html: string,
-  url: string,
-  depth: number
-): ImageInfo[] {
+function extractImages(html: string, url: string, depth: number): ImageInfo[] {
   const $ = cheerio.load(html);
   const images: ImageInfo[] = [];
   $('img').each((_, element) => {
@@ -106,24 +102,19 @@ export function extractImages(
       images.push({ url: src, page: url, depth });
     }
   });
-  log(`Extracted images from ${url} at depth ${depth}:`, images);
   return images;
 }
 
-export async function saveImages(images: ImageInfo[]): Promise<void> {
+async function saveImages(images: ImageInfo[]): Promise<void> {
   await fs.ensureDir(imagesDir);
   const index = (await fs
     .readJson(indexPath)
     .catch(() => ({ images: [] }))) as { images: ImageInfo[] };
   index.images.push(...images);
   await fs.writeJson(indexPath, index, { spaces: 2 });
-  log('Saved images:', images);
 }
 
-export async function downloadImage(
-  url: string,
-  filepath: string
-): Promise<void> {
+async function downloadImage(url: string, filepath: string): Promise<void> {
   const response = await axios({
     url,
     method: 'GET',
@@ -163,58 +154,47 @@ function shouldCrawlLink(link: string, baseUrl: string): boolean {
   }
 }
 
-export async function crawl(url: string, maxDepth: number): Promise<void> {
-  const urlsToCrawl = new Set<string>([url]);
-  const newUrls = new Set<string>();
-
-  for (let currentDepth = 1; currentDepth <= maxDepth; currentDepth++) {
-    for (const currentUrl of urlsToCrawl) {
-      if (visitedUrls.has(currentUrl)) continue;
-      visitedUrls.add(currentUrl);
-      console.log(`Crawling ${currentUrl} at depth ${currentDepth}`);
-      try {
-        const html = await fetchPage(currentUrl);
-        const images = extractImages(html, currentUrl, currentDepth);
-        await saveImages(images);
-        for (const image of images) {
-          const filepath = path.join(imagesDir, getImageFilename(image.url));
-          await downloadImage(image.url, filepath);
-        }
-        if (currentDepth < maxDepth) {
-          const $ = cheerio.load(html);
-          const links = $('a[href]')
-            .map((_, element) => $(element).attr('href'))
-            .get()
-            .filter((link) =>
-              shouldCrawlLink(resolveUrl(currentUrl, link), currentUrl)
-            );
-          for (const link of links) {
-            const resolvedLink = resolveUrl(currentUrl, link);
-            newUrls.add(resolvedLink);
-            console.log(
-              `Queueing link ${resolvedLink} at depth ${currentDepth + 1}`
-            );
-          }
-        }
-      } catch (error) {
-        if (error instanceof Error) {
-          console.error(
-            `Error crawling ${currentUrl} at depth ${currentDepth}:`,
-            error.message
-          );
-        } else {
-          console.error(
-            `Error crawling ${currentUrl} at depth ${currentDepth}:`,
-            error
-          );
+async function crawl(
+  url: string,
+  maxDepth: number,
+  currentDepth = 1
+): Promise<void> {
+  if (!isValidUrl(url)) {
+    console.error(`Invalid URL: ${url}`);
+    return;
+  }
+  if (currentDepth > maxDepth || visitedUrls.has(url)) return;
+  visitedUrls.add(url);
+  console.log(`Crawling ${url} at depth ${currentDepth}`);
+  try {
+    const html = await fetchPage(url);
+    const images = extractImages(html, url, currentDepth);
+    await saveImages(images);
+    for (const image of images) {
+      const filepath = path.join(imagesDir, getImageFilename(image.url));
+      await downloadImage(image.url, filepath);
+    }
+    if (currentDepth < maxDepth) {
+      const $ = cheerio.load(html);
+      const links = $('a[href]')
+        .map((_, element) => $(element).attr('href'))
+        .get();
+      for (const link of links) {
+        const resolvedLink = resolveUrl(url, link);
+        if (shouldCrawlLink(resolvedLink, url)) {
+          await crawl(resolvedLink, maxDepth, currentDepth + 1);
         }
       }
     }
-    urlsToCrawl.clear();
-    for (const newUrl of newUrls) {
-      urlsToCrawl.add(newUrl);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(
+        `Error crawling ${url} at depth ${currentDepth}:`,
+        error.message
+      );
+    } else {
+      console.error(`Error crawling ${url} at depth ${currentDepth}:`, error);
     }
-    newUrls.clear();
   }
 }
 
@@ -227,3 +207,5 @@ process.on('SIGTERM', () => {
   console.log('Gracefully shutting down...');
   process.exit();
 });
+
+export { crawl };
