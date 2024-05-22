@@ -1,5 +1,10 @@
 module.exports = {
-  preset: "ts-jest",
-  testEnvironment: "node",
-  testPathIgnorePatterns: ["/node_modules/", "/dist/"],
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  moduleNameMapper: {
+    '^axios$': '<rootDir>/src/__mocks__/axios.js'
+  },
+  transform: {
+    '^.+\\.tsx?$': 'ts-jest',
+  },
 };

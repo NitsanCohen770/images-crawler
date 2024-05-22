@@ -5,6 +5,7 @@ import path from 'path';
 import Bottleneck from 'bottleneck';
 import debug from 'debug';
 import crypto from 'crypto';
+import puppeteer from 'puppeteer';
 
 const log = debug('crawler');
 
@@ -56,38 +57,13 @@ function resolveUrl(base: string, relative: string): string {
 
 async function fetchPage(url: string): Promise<string> {
   const userAgent = getRandomUserAgent();
-  const maxRetries = 3;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      log(`Fetching page: ${url}`);
-      const { data } = await limiter.schedule(() =>
-        axios.get(url, {
-          timeout: config.timeout,
-          headers: { 'User-Agent': userAgent },
-        })
-      );
-      log(`Fetched page: ${url}`);
-      return data;
-    } catch (error) {
-      if (attempt < maxRetries) {
-        log(`Retrying fetch for ${url} (attempt ${attempt})`);
-      } else {
-        if (error instanceof Error) {
-          console.error(
-            `Failed to fetch page after ${maxRetries} attempts: ${url}`,
-            error.message
-          );
-        } else {
-          console.error(
-            `Failed to fetch page after ${maxRetries} attempts: ${url}`,
-            error
-          );
-        }
-        throw error;
-      }
-    }
-  }
-  throw new Error(`Failed to fetch page: ${url}`);
+  const browser = await puppeteer.launch();
+  const page = await browser.newPage();
+  await page.setUserAgent(userAgent);
+  await page.goto(url, { waitUntil: 'networkidle0', timeout: config.timeout });
+  const content = await page.content();
+  await browser.close();
+  return content;
 }
 
 function extractImages(html: string, url: string, depth: number): ImageInfo[] {
