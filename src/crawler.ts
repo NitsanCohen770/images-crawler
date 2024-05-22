@@ -196,21 +196,23 @@ export async function crawl(
     }
     const images = await extractImages(html, url, currentDepth);
     await saveImages(images);
-    for (const image of images) {
+    const imageDownloadPromises = images.map((image) => {
       const filepath = path.join(imagesDir, getImageFilename(image.url));
-      await downloadImage(image.url, filepath);
-    }
+      return downloadImage(image.url, filepath);
+    });
+    await Promise.all(imageDownloadPromises);
     if (currentDepth < maxDepth) {
       const $ = cheerio.load(html);
       const links = $('a[href]')
         .map((_, element) => $(element).attr('href'))
         .get();
-      for (const link of links) {
+      const crawlPromises = links.map(async (link) => {
         const resolvedLink = resolveUrl(url, link);
         if (shouldCrawlLink(resolvedLink, url)) {
           await crawl(resolvedLink, maxDepth, currentDepth + 1);
         }
-      }
+      });
+      await Promise.all(crawlPromises);
     }
   } catch (error) {
     if (error instanceof Error) {
