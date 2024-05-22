@@ -6,6 +6,7 @@ import Bottleneck from 'bottleneck';
 import debug from 'debug';
 import crypto from 'crypto';
 import puppeteer from 'puppeteer';
+const PQueue = require('@esm2cjs/p-queue').default;
 
 const log = debug('crawler');
 
@@ -27,6 +28,10 @@ const limiter = new Bottleneck({
   minTime: 200,
   maxConcurrent: 5,
 });
+
+const queue = new PQueue({ concurrency: 5 });
+
+let activeTasks = 0;
 
 interface ImageInfo {
   url: string;
@@ -177,7 +182,7 @@ function shouldCrawlLink(link: string, baseUrl: string): boolean {
   }
 }
 
-export async function crawl(
+async function processUrl(
   url: string,
   maxDepth: number,
   currentDepth = 1
@@ -188,7 +193,10 @@ export async function crawl(
   }
   if (currentDepth > maxDepth || visitedUrls.has(url)) return;
   visitedUrls.add(url);
-  console.log(`Crawling ${url} at depth ${currentDepth}`);
+  activeTasks++;
+  console.log(
+    `Crawling ${url} at depth ${currentDepth}. Active tasks: ${activeTasks}`
+  );
   try {
     let html = await fetchPage(url);
     if (hasSignificantJavaScript(html)) {
@@ -206,13 +214,12 @@ export async function crawl(
       const links = $('a[href]')
         .map((_, element) => $(element).attr('href'))
         .get();
-      const crawlPromises = links.map(async (link) => {
+      links.forEach((link) => {
         const resolvedLink = resolveUrl(url, link);
         if (shouldCrawlLink(resolvedLink, url)) {
-          await crawl(resolvedLink, maxDepth, currentDepth + 1);
+          queue.add(() => processUrl(resolvedLink, maxDepth, currentDepth + 1));
         }
       });
-      await Promise.all(crawlPromises);
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -223,7 +230,17 @@ export async function crawl(
     } else {
       console.error(`Error crawling ${url} at depth ${currentDepth}:`, error);
     }
+  } finally {
+    activeTasks--;
+    console.log(
+      `Finished crawling ${url} at depth ${currentDepth}. Active tasks: ${activeTasks}`
+    );
   }
+}
+
+export async function crawl(url: string, maxDepth: number): Promise<void> {
+  queue.add(() => processUrl(url, maxDepth));
+  await queue.onIdle();
 }
 
 process.on('SIGINT', () => {
